@@ -17,10 +17,11 @@ diagnóstico.
 
 - **Python 3.12 + Flask** — aplicação web e API mockada
 - **SQLite** — armazenamento de usuários (tabela `usuarios`)
-- **Tabulator.js** (via CDN) — exibição e busca dos agendamentos no front-end
-- **Requests** — consumo HTTP da API de agendamentos
+- **Tabulator.js** (via CDN) — exibição, busca e paginação dos agendamentos
+- **Requests** — consumo HTTP da API de agendamentos, com retry/backoff
 - **Docker / docker-compose** — orquestração da aplicação e da API mockada
-- **Pytest** — testes automatizados
+- **Pytest + pytest-cov** — testes automatizados e cobertura
+- **GitHub Actions** — CI rodando a suíte de testes a cada push/PR
 
 ## Arquitetura
 
@@ -135,17 +136,26 @@ python run.py
 ```bash
 pip install -r requirements-dev.txt
 pytest -v
+
+# com relatório de cobertura
+pytest --cov=app --cov-report=term-missing
 ```
 
-Cobertura inclui:
+Cobertura atual: **~86%** (medida com `pytest-cov`). Rodado automaticamente
+a cada push/PR via GitHub Actions (`.github/workflows/testes.yml`).
+
+Cenários cobertos:
 - login com credenciais válidas e inválidas, e campos vazios
+- bloqueio por excesso de tentativas (força bruta) e proteção CSRF
+- política mínima de senha na criação de usuário
 - bloqueio de acesso à agenda/API sem sessão ativa
 - listagem de agendamentos sem resultados
 - falha da API de agendamentos (erro tratado, resposta 502 com mensagem
-  amigável)
+  amigável) e recuperação automática via retry após falha transitória
 - busca por paciente inexistente
-- cliente HTTP: timeout, conexão recusada, resposta vazia, JSON inválido e
-  descarte de registros com campos obrigatórios ausentes
+- cliente HTTP: timeout, conexão recusada, erro 4xx (sem retry), resposta
+  vazia, JSON inválido, CPF em formato inválido e campos obrigatórios
+  ausentes
 
 ## Decisões técnicas
 
@@ -155,9 +165,13 @@ Cobertura inclui:
   cenários de falha).
 - **Descarte silencioso de registros incompletos**: em vez de rejeitar a
   resposta inteira da API quando um único agendamento vem com campo
-  obrigatório ausente, o registro problemático é descartado e um aviso é
-  registrado em log — a aplicação segue funcionando com os dados válidos
-  restantes.
+  obrigatório ausente (ou CPF malformado), o registro problemático é
+  descartado e um aviso é registrado em log — a aplicação segue funcionando
+  com os dados válidos restantes.
+- **Retry com backoff exponencial**: falhas transitórias (timeout, conexão
+  recusada, erro 5xx) são reprocessadas automaticamente até 3 vezes antes
+  de reportar erro ao usuário. Erros 4xx não são reprocessados, pois
+  repetir a mesma requisição não mudaria o resultado.
 - **Sessão simples via Flask `session`** (cookie assinado) para autenticação,
   suficiente para o escopo do desafio; em um cenário de produção real,
   avaliaria JWT ou Flask-Login com expiração/refresh.
@@ -169,15 +183,23 @@ Cobertura inclui:
   atendendo ao requisito de a aplicação "entregar os dados quando iniciada
   pelo terminal" sem bloquear a subida do servidor caso a API esteja
   temporariamente indisponível.
+- **CSRF com token sincronizado (sem dependência externa)**: implementação
+  própria (`app/security.py`) em vez de Flask-WTF, para manter as
+  dependências do projeto enxutas — a técnica (synchronizer token pattern)
+  é a mesma usada por bibliotecas prontas.
 
 ## Segurança
 
-- Senhas armazenadas com hash (`werkzeug.security`, PBKDF2).
+- Senhas armazenadas com hash (`werkzeug.security`, PBKDF2), com política
+  mínima na criação (8+ caracteres, ao menos uma letra e um número).
+- Proteção **CSRF** nos formulários de login/logout (synchronizer token
+  pattern, próprio, sem dependência externa).
 - Cookies de sessão com `HttpOnly` e `SameSite=Lax`; `Secure` habilitável via
   `SESSION_COOKIE_SECURE=1` (usar sempre atrás de HTTPS em produção).
 - Bloqueio temporário após 5 tentativas de login inválidas por combinação
   IP + e-mail, em janela de 5 minutos (proteção simples contra força bruta;
-  implementação em memória, válida para uma única instância).
+  implementação em memória, válida para uma única instância — ver
+  "Próximos passos").
 - Consultas ao SQLite sempre parametrizadas (sem concatenação de SQL).
 - Cabeçalhos HTTP básicos de segurança (`X-Content-Type-Options`,
   `X-Frame-Options`, `Referrer-Policy`) aplicados a todas as respostas.
@@ -186,18 +208,44 @@ Cobertura inclui:
   chave padrão previsível.
 - Containers Docker rodam com usuário não-root.
 
+## Observabilidade
+
+- **Healthcheck** em `/health` (aplicação principal) e `/health` (API
+  mockada), verificando inclusive a conectividade com o banco de dados —
+  útil para load balancers e para o monitoramento automático do Render.
+- **Logs estruturados em JSON**, ativáveis via `LOG_FORMAT=json` (formato
+  texto simples é o padrão, mais legível em desenvolvimento local). Facilita
+  integração futura com ferramentas como Datadog, ELK ou CloudWatch Logs
+  Insights.
+
 ## Limitações conhecidas
 
-- **Sem proteção CSRF** nos formulários (login/logout). Para uma aplicação
-  com mais tempo de desenvolvimento, adicionaria tokens CSRF (ex.:
-  Flask-WTF) — no escopo deste desafio, mitigado parcialmente pelo cookie
-  `SameSite=Lax`.
-- O bloqueio de tentativas de login é em memória do processo; em um
-  deploy com múltiplas réplicas, precisaria de um armazenamento
+- O bloqueio de tentativas de login (força bruta) é em memória do processo;
+  em um deploy com múltiplas réplicas, precisaria de um armazenamento
   compartilhado (ex.: Redis) para funcionar corretamente entre instâncias.
 - A tabela `agendamentos_cache` existe no schema para uso futuro (ex.: cache
   local dos dados da API), mas não é utilizada nesta versão — os dados são
   buscados diretamente da API a cada requisição.
-- Não há paginação: o volume de dados mockado é pequeno, então o Tabulator
-  recebe a lista completa e faz a filtragem no cliente/servidor de forma
-  simples.
+- A paginação da tabela (Tabulator) é feita inteiramente no front-end; para
+  um volume de dados muito maior, seria necessário paginar também a
+  consulta no back-end/API.
+
+## Próximos passos (fora do escopo deste desafio)
+
+Itens que dependem de infraestrutura externa não disponível no ambiente
+deste desafio, mas que eu levaria em conta evoluindo o projeto para
+produção:
+
+- **PostgreSQL** no lugar do SQLite — SQLite serializa escritas (um único
+  writer por vez), o que não escala para uso multiusuário real.
+- **Migrations com Alembic** no lugar do `seed.py` manual — versionamento
+  de schema com rollback.
+- **Cache dos agendamentos (Redis)** com TTL curto — reduz carga na API
+  externa e melhora tempo de resposta.
+- **Rate limiting e circuit breaker distribuídos (Redis)** — a proteção
+  contra força bruta e o retry atuais funcionam por instância; em múltiplas
+  réplicas precisariam de estado compartilhado.
+- **Métricas** (tempo de resposta, taxa de erro por endpoint) exportadas
+  para Prometheus/Datadog.
+- **Validação de schema com Pydantic** na resposta da API de agendamentos,
+  no lugar da checagem manual de campos atual.

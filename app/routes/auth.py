@@ -16,6 +16,7 @@ from flask import (
 
 from app.models.database import DatabaseError
 from app.models.usuario import validar_credenciais
+from app.security import validar_csrf_token
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__)
@@ -69,6 +70,8 @@ def login():
     if request.method == "GET":
         return render_template("login.html")
 
+    validar_csrf_token(request.form.get("csrf_token"))
+
     email = request.form.get("email", "")
     senha = request.form.get("senha", "")
     ip_cliente = request.remote_addr or "desconhecido"
@@ -109,5 +112,6 @@ def login():
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
+    validar_csrf_token(request.form.get("csrf_token"))
     session.clear()
     return redirect(url_for("auth.login"))

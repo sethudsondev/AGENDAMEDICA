@@ -1,12 +1,32 @@
 import logging
+import re
+
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.models.database import db_session, DatabaseError
 
 logger = logging.getLogger(__name__)
 
+SENHA_MIN_CARACTERES = 8
+
+
+class SenhaFracaError(ValueError):
+    """Levantado quando a senha não atende à política mínima de segurança."""
+
+
+def _validar_politica_senha(senha):
+    if len(senha) < SENHA_MIN_CARACTERES:
+        raise SenhaFracaError(
+            f"A senha deve ter pelo menos {SENHA_MIN_CARACTERES} caracteres."
+        )
+    if not re.search(r"[A-Za-z]", senha):
+        raise SenhaFracaError("A senha deve conter pelo menos uma letra.")
+    if not re.search(r"[0-9]", senha):
+        raise SenhaFracaError("A senha deve conter pelo menos um número.")
+
 
 def criar_usuario(db_path, email, senha, nome=None):
+    _validar_politica_senha(senha)
     senha_hash = generate_password_hash(senha)
     with db_session(db_path) as conn:
         conn.execute(

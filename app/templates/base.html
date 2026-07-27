@@ -12,6 +12,7 @@
         <span class="logo">🩺 Agenda Médica</span>
         {% if session.get('usuario_email') %}
         <form action="{{ url_for('auth.logout') }}" method="post" class="logout-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <span class="user-email">{{ session.get('usuario_email') }}</span>
             <button type="submit" class="btn-secundario">Sair</button>
         </form>

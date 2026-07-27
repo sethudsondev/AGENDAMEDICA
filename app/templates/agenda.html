@@ -16,6 +16,9 @@
     </div>
 
     <div id="mensagem-tabela" class="mensagem-tabela" style="display:none;"></div>
+    <div id="carregando" class="carregando" style="display:none;">
+        <span class="spinner"></span> Carregando agendamentos...
+    </div>
     <div id="tabela-agendamentos"></div>
 </div>
 
@@ -23,6 +26,10 @@
 const tabela = new Tabulator("#tabela-agendamentos", {
     layout: "fitColumns",
     placeholder: "Carregando agendamentos...",
+    pagination: true,
+    paginationSize: 10,
+    paginationSizeSelector: [5, 10, 20, 50],
+    paginationCounter: "rows",
     columns: [
         { title: "Data", field: "data", sorter: "string", width: 100 },
         { title: "Horário", field: "horario", width: 90 },
@@ -36,17 +43,36 @@ const tabela = new Tabulator("#tabela-agendamentos", {
 });
 
 const mensagemTabela = document.getElementById("mensagem-tabela");
+const carregandoEl = document.getElementById("carregando");
 
 function mostrarMensagem(texto) {
     mensagemTabela.textContent = texto;
     mensagemTabela.style.display = texto ? "block" : "none";
 }
 
+function mostrarCarregando(mostrar) {
+    carregandoEl.style.display = mostrar ? "flex" : "none";
+}
+
+let controladorBusca = null;
+
 async function carregarAgendamentos(busca) {
     mostrarMensagem("");
+
+    // Cancela uma busca anterior ainda em andamento (ex.: usuário digitando
+    // rápido), evitando que uma resposta antiga sobrescreva uma mais nova.
+    if (controladorBusca) {
+        controladorBusca.abort();
+    }
+    controladorBusca = new AbortController();
+
+    mostrarCarregando(true);
     const params = busca ? ("?busca=" + encodeURIComponent(busca)) : "";
     try {
-        const resp = await fetch("{{ url_for('agenda.listar_agendamentos') }}" + params);
+        const resp = await fetch(
+            "{{ url_for('agenda.listar_agendamentos') }}" + params,
+            { signal: controladorBusca.signal }
+        );
         const dados = await resp.json();
 
         if (!resp.ok) {
@@ -63,8 +89,11 @@ async function carregarAgendamentos(busca) {
 
         tabela.setData(dados.agendamentos);
     } catch (erro) {
+        if (erro.name === "AbortError") return;
         mostrarMensagem("Erro de comunicação com o servidor. Tente novamente.");
         tabela.setData([]);
+    } finally {
+        mostrarCarregando(false);
     }
 }
 

@@ -5,6 +5,7 @@
     <h1>Entrar</h1>
     <p class="subtitulo">Acesse a Agenda Médica</p>
     <form method="post" action="{{ url_for('auth.login') }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="email">Usuário ou e-mail</label>
         <input type="text" id="email" name="email" autocomplete="username" required>
 
