@@ -1,9 +1,0 @@
-[project]
-name = "agendamedica"
-version = "1.0.0"
-dependencies = [
-    "flask"
-]
-
-[tool.vercel]
-entrypoint = "run:app"
