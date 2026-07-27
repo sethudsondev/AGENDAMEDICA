@@ -1,0 +1,35 @@
+services:
+  mock-api:
+    build: ./mock_api
+    container_name: agenda-medica-mock-api
+    ports:
+      - "5001:5001"
+    environment:
+      MOCK_API_PORT: "5001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build: .
+    container_name: agenda-medica-web
+    ports:
+      - "5000:5000"
+    environment:
+      SECRET_KEY: "${SECRET_KEY:-dev-secret-key-change-me}"
+      DATABASE_PATH: /app/instance/agenda.db
+      AGENDAMENTOS_API_URL: http://mock-api:5001/api/agendamentos
+      API_TIMEOUT_SECONDS: "5"
+      TEST_USER_EMAIL: "${TEST_USER_EMAIL:-teste@timesaver.com.br}"
+      TEST_USER_PASSWORD: "${TEST_USER_PASSWORD:-senha123}"
+      LOG_LEVEL: INFO
+    volumes:
+      - agenda-db:/app/instance
+    depends_on:
+      mock-api:
+        condition: service_healthy
+
+volumes:
+  agenda-db:

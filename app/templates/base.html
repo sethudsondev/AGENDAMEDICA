@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Agenda Médica{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header class="topbar">
+        <span class="logo">🩺 Agenda Médica</span>
+        {% if session.get('usuario_email') %}
+        <form action="{{ url_for('auth.logout') }}" method="post" class="logout-form">
+            <span class="user-email">{{ session.get('usuario_email') }}</span>
+            <button type="submit" class="btn-secundario">Sair</button>
+        </form>
+        {% endif %}
+    </header>
+
+    <main class="conteudo">
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                <div class="flash-container">
+                {% for categoria, mensagem in mensagens %}
+                    <div class="flash flash-{{ categoria }}">{{ mensagem }}</div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

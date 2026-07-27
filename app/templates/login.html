@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Login — Agenda Médica{% endblock %}
+{% block content %}
+<div class="login-card">
+    <h1>Entrar</h1>
+    <p class="subtitulo">Acesse a Agenda Médica</p>
+    <form method="post" action="{{ url_for('auth.login') }}" novalidate>
+        <label for="email">Usuário ou e-mail</label>
+        <input type="text" id="email" name="email" autocomplete="username" required>
+
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" name="senha" autocomplete="current-password" required>
+
+        <button type="submit" class="btn-primario">Entrar</button>
+    </form>
+</div>
+{% endblock %}

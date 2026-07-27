@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Agenda — Agenda Médica{% endblock %}
+
+{% block head %}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.1/css/tabulator.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.1/js/tabulator.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="agenda-wrap">
+    <h1>Agendamentos</h1>
+
+    <div class="busca-barra">
+        <input type="text" id="campo-busca" placeholder="Buscar por paciente, CPF ou médico...">
+        <button id="btn-limpar" class="btn-secundario">Limpar</button>
+    </div>
+
+    <div id="mensagem-tabela" class="mensagem-tabela" style="display:none;"></div>
+    <div id="tabela-agendamentos"></div>
+</div>
+
+<script>
+const tabela = new Tabulator("#tabela-agendamentos", {
+    layout: "fitColumns",
+    placeholder: "Carregando agendamentos...",
+    columns: [
+        { title: "Data", field: "data", sorter: "string", width: 100 },
+        { title: "Horário", field: "horario", width: 90 },
+        { title: "Paciente", field: "paciente" },
+        { title: "CPF", field: "cpf", width: 130 },
+        { title: "Médico", field: "medico" },
+        { title: "Especialidade", field: "especialidade" },
+        { title: "Convênio", field: "convenio" },
+        { title: "Status", field: "status", width: 110 },
+    ],
+});
+
+const mensagemTabela = document.getElementById("mensagem-tabela");
+
+function mostrarMensagem(texto) {
+    mensagemTabela.textContent = texto;
+    mensagemTabela.style.display = texto ? "block" : "none";
+}
+
+async function carregarAgendamentos(busca) {
+    mostrarMensagem("");
+    const params = busca ? ("?busca=" + encodeURIComponent(busca)) : "";
+    try {
+        const resp = await fetch("{{ url_for('agenda.listar_agendamentos') }}" + params);
+        const dados = await resp.json();
+
+        if (!resp.ok) {
+            mostrarMensagem(dados.erro || "Não foi possível carregar os agendamentos.");
+            tabela.setData([]);
+            return;
+        }
+
+        if (!dados.agendamentos || dados.agendamentos.length === 0) {
+            mostrarMensagem("Nenhum agendamento encontrado.");
+            tabela.setData([]);
+            return;
+        }
+
+        tabela.setData(dados.agendamentos);
+    } catch (erro) {
+        mostrarMensagem("Erro de comunicação com o servidor. Tente novamente.");
+        tabela.setData([]);
+    }
+}
+
+document.getElementById("campo-busca").addEventListener("input", (e) => {
+    carregarAgendamentos(e.target.value);
+});
+document.getElementById("btn-limpar").addEventListener("click", () => {
+    document.getElementById("campo-busca").value = "";
+    carregarAgendamentos("");
+});
+
+carregarAgendamentos("");
+</script>
+{% endblock %}

@@ -1,0 +1,43 @@
+# Render Blueprint (Infrastructure as Code)
+#
+# Como usar:
+#   1. Suba este repositório para o GitHub.
+#   2. No dashboard do Render: New + -> Blueprint -> selecione o repositório.
+#   3. O Render detecta este arquivo automaticamente e mostra os dois
+#      serviços abaixo para revisão -> clique em "Apply".
+#
+# Os dois serviços são criados e conectados automaticamente: a URL da API
+# mockada é injetada no serviço "web" via `fromService`, sem necessidade de
+# copiar/colar URLs manualmente entre eles.
+#
+# Documentação: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: agenda-medica-mock-api
+    env: docker
+    plan: free
+    rootDir: mock_api
+    healthCheckPath: /health
+
+  - type: web
+    name: agenda-medica-web
+    env: docker
+    plan: free
+    healthCheckPath: /login
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AGENDAMENTOS_HOST
+        fromService:
+          type: web
+          name: agenda-medica-mock-api
+          property: host
+      - key: DATABASE_PATH
+        value: /app/instance/agenda.db
+      - key: TEST_USER_EMAIL
+        value: teste@timesaver.com.br
+      - key: TEST_USER_PASSWORD
+        value: senha123
+      - key: LOG_LEVEL
+        value: INFO
